@@ -46,26 +46,41 @@ async function main() {
     ],
   });
 
-  // Create render pass in a command buffer
-  const encoder = device.createCommandEncoder();
-  const pass = encoder.beginRenderPass({
-    colorAttachments: [
-      {
-        view: context.getCurrentTexture().createView(),
-        loadOp: "clear",
-        storeOp: "store",
-      },
-    ],
-  });
   const aspect = canvas.width / canvas.height;
   var cam_const = 1.0;
   var gamma = 1;
   var uniforms = new Float32Array([aspect, cam_const, gamma]);
   device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 
-  pass.setPipeline(pipeline);
-  pass.setBindGroup(0, bindGroup);
-  pass.draw(4);
-  pass.end();
-  device.queue.submit([encoder.finish()]);
+  function animate() {
+    uniforms[1] = cam_const;
+    device.queue.writeBuffer(uniformBuffer, 0, uniforms);
+    render();
+  }
+  animate();
+
+  addEventListener("wheel", (event) => {
+    cam_const *= 1.0 + 2.5e-4 * event.deltaY;
+    requestAnimationFrame(animate);
+  });
+
+  function render() {
+    // Create render pass in a command buffer
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: context.getCurrentTexture().createView(),
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
+    });
+
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(4);
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+  }
 }

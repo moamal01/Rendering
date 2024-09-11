@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>W1P4</title>
-    <script type="text/javascript" src="w0p4.js"></script>
+    <script type="text/javascript" src="w0p5.js"></script>
     <script id="wgsl" type="x-shader">
         struct Uniforms {
           aspect: f32,
@@ -147,6 +147,8 @@
           return ray;
         }
 
+
+
         fn shade(r: ptr<function, Ray>,hit: ptr<function, HitInfo>) -> vec3f {
           switch (*hit).shader {
           //case 1 { return lambertian(r, hit); }
@@ -155,6 +157,7 @@
           case default { return (*hit).color; }
         }
       }
+
 
         fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool {
           // plane

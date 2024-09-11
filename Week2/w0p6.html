@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>W1P4</title>
-    <script type="text/javascript" src="w0p4.js"></script>
+    <script type="text/javascript" src="w0p6.js"></script>
     <script id="wgsl" type="x-shader">
         struct Uniforms {
           aspect: f32,
@@ -41,6 +41,12 @@
           color: vec3f,
           shader: u32,
         };
+
+        struct Light {
+          L_i: vec3f,
+          w_i: vec3f,
+          dist: f32,
+        }
 
         fn intersect_plane(r: Ray, hit: ptr<function, HitInfo>, position: vec3f, normal: vec3f) -> bool {
           let t_prime = dot((position - r.origin), normal) / dot(r.direction, normal);
@@ -102,6 +108,9 @@
           let normal = p - center;
 
           if t1_prime > r.tmin && t1_prime < r.tmax {
+            //(*hit).has_hit = true;
+            // hit.dist = t1_prime;
+
             (*hit).has_hit = true;
             (*hit).dist = t1_prime;
             (*hit).position = p;
@@ -126,6 +135,31 @@
           return false;
         }
 
+        fn sample_point_light(pos: vec3f) -> Light {
+          let pi = 3.14159;
+          let p = vec3f(0.0, 1.0, 0.0);
+          let I = vec3f(pi);
+          let L_a = 0.0;
+          let L_e = 0.0;
+
+          let L_i = I / (length(p - pos) * length(p - pos));
+
+          let light = Light (
+            L_i,
+            normalize(p - pos),
+            length(p - pos)
+          );
+
+          return light;
+        }
+
+        fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
+          // let rho = length(pos);
+          // let L_r = (rho / pi) * L_i * (normal-) + L_a
+
+          // let L_o = L_e + L_a;
+        }
+
         fn get_camera_ray(ipcoords: vec2f) -> Ray
         {
           const eye = vec3f(2.0, 1.5, 2.0);
@@ -147,14 +181,17 @@
           return ray;
         }
 
+
+
         fn shade(r: ptr<function, Ray>,hit: ptr<function, HitInfo>) -> vec3f {
           switch (*hit).shader {
-          //case 1 { return lambertian(r, hit); }
+          case 1 { return lambertian(r, hit); }
           //case 2 { return phong(r, hit); }
           //case 3 { return mirror(r, hit); }
           case default { return (*hit).color; }
         }
       }
+
 
         fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool {
           // plane
