@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>W1P4</title>
+    <title>W0P6</title>
     <script type="text/javascript" src="w0p6.js"></script>
     <script id="wgsl" type="x-shader">
         struct Uniforms {
@@ -136,11 +136,8 @@
         }
 
         fn sample_point_light(pos: vec3f) -> Light {
-          let pi = 3.14159;
           let p = vec3f(0.0, 1.0, 0.0);
-          let I = vec3f(pi);
-          let L_a = 0.0;
-          let L_e = 0.0;
+          let I = vec3f(3.14159);
 
           let L_i = I / (length(p - pos) * length(p - pos));
 
@@ -154,10 +151,13 @@
         }
 
         fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          // let rho = length(pos);
-          // let L_r = (rho / pi) * L_i * (normal-) + L_a
+          let light = sample_point_light(hit.position);
 
-          // let L_o = L_e + L_a;
+          let L_a = 0.0;
+          let L_e = 0.0;
+          let L_r = (hit.color / 3.14159) * light.L_i * dot(hit.normal,light.w_i) + L_a;
+
+          return L_e + L_r + L_a;
         }
 
         fn get_camera_ray(ipcoords: vec2f) -> Ray
@@ -180,8 +180,6 @@
 
           return ray;
         }
-
-
 
         fn shade(r: ptr<function, Ray>,hit: ptr<function, HitInfo>) -> vec3f {
           switch (*hit).shader {
@@ -212,10 +210,12 @@
 
           // Check if the ray intersects the plane
           if intersect_plane((*r), hit, position, normal) {
+            hit.shader = 1;
             r.tmax = hit.dist;
           }
 
           if intersect_triangle((*r), hit, array<vec3f, 3>(v0, v1, v2)) {
+            hit.shader = 1;
             r.tmax = hit.dist;
           }
 
