@@ -170,6 +170,7 @@
 
           let cos_theta = dot(w_i,hit.normal);
 
+          // Re-emit the ray with new direction and origin. Don't return anything for this hit.
           r.direction = 2 * cos_theta * hit.normal - w_i;
           r.origin = hit.position;
           r.tmin = 1e-4;
