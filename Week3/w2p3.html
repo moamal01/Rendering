@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>W2P2</title>
-    <script type="text/javascript" src="w2p2.js"></script>
+    <title>W2P3</title>
+    <script type="text/javascript" src="w2p3.js"></script>
     <script id="wgsl" type="x-shader">
         struct Uniforms {
           aspect: f32,
@@ -41,6 +41,7 @@
           normal: vec3f,
           color: vec3f,
           shader: u32,
+          ior1_over_ior2: f32,
         };
 
         struct Light {
@@ -105,31 +106,33 @@
           }
 
           let t1_prime = -b_half - sqrt(b_half*b_half - c);
-          let p = r.origin + t1_prime * r.direction;
-          let normal = p - center;
+          var p = r.origin + t1_prime * r.direction;
+          var normal = p - center;
 
           if t1_prime > r.tmin && t1_prime < r.tmax {
-            //(*hit).has_hit = true;
-            // hit.dist = t1_prime;
-
             (*hit).has_hit = true;
             (*hit).dist = t1_prime;
             (*hit).position = p;
             (*hit).normal = normal / length(normal);
             (*hit).color = vec3f(0.0, 0.0, 0.0);
             (*hit).shader = 0;
+            (*hit).ior1_over_ior2 = 1.5;
             return true;
           }
 
           let t2_prime = -b_half + sqrt(b_half*b_half - c);
 
           if t2_prime > r.tmin && t2_prime < r.tmax {
+            var p = r.origin + t2_prime * r.direction;
+            var normal = p - center;
+
             (*hit).has_hit = true;
             (*hit).dist = t2_prime;
-            (*hit).position = r.origin + t2_prime * r.direction;
+            (*hit).position = p;
             (*hit).normal = normal / length(normal);
             (*hit).color = vec3f(0.0, 0.0, 0.0);
             (*hit).shader = 0;
+            (*hit).ior1_over_ior2 = 1.5;
             return true;
           }
 
@@ -168,6 +171,7 @@
             hit.normal,
             vec3f(0.0),
             1,
+            1.5,
           );
 
           let L_a = hit.color * 0.1;
@@ -193,6 +197,32 @@
 
           // Re-emit the ray with new direction and origin. Don't return anything for this hit.
           r.direction = 2 * cos_theta * hit.normal - w_i;
+          r.origin = hit.position;
+          r.tmin = 1e-4;
+          r.tmax = 100000;
+          hit.has_hit = false;
+
+          return vec3f(0.0);
+        }
+
+        fn refractive(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
+          let light = sample_point_light(hit.position);
+
+          let A = r.origin;
+          let B = hit.position;
+          let w_i = (A - B) / length(A - B);
+
+          let cos_theta = dot(w_i,hit.normal);
+
+          let cos_theta_t_sqaured = 1 - hit.ior1_over_ior2 * hit.ior1_over_ior2 * (1-dot(w_i, hit.normal)*dot(w_i, hit.normal));
+
+          var direction = hit.ior1_over_ior2 * (dot(w_i, hit.normal) * hit.normal - w_i) - hit.normal * sqrt(cos_theta_t_sqaured);
+          if (cos_theta_t_sqaured < 0) {
+            direction = 2 * cos_theta * hit.normal - w_i;
+          }
+
+          // Re-emit the ray with new direction and origin. Don't return anything for this hit.
+          r.direction = direction;
           r.origin = hit.position;
           r.tmin = 1e-4;
           r.tmax = 100000;
@@ -227,10 +257,10 @@
           case 1 { return lambertian(r, hit); }
           //case 2 { return phong(r, hit); }
           case 2 { return mirror(r, hit); }
+          case 3 { return refractive(r, hit); }
           case default { return (*hit).color; }
         }
       }
-
 
         fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool {
           // plane
@@ -262,6 +292,14 @@
 
           if intersect_sphere((*r), hit, center, radius) {
             hit.shader = u32(uniforms.shader);
+
+            if (dot(r.direction, hit.normal) > 0) {
+              hit.ior1_over_ior2 = refractive_index;
+              hit.normal = -hit.normal;
+            } else {
+              hit.ior1_over_ior2 = 1 / refractive_index;
+            }
+
             r.tmax = hit.dist;
           }
 
@@ -275,7 +313,7 @@
             let uv = vec2f(coords.x*uniforms.aspect*0.5f, coords.y*0.5f);
             var r = get_camera_ray(uv);
             var result = vec3f(0.0);
-            var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0);
+            var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5);
             for(var i = 0; i < max_depth; i++) {
                 if(intersect_scene(&r, &hit)) {
                     result += shade(&r, &hit);
