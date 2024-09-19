@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>W2P4</title>
-    <script type="text/javascript" src="w2p4.js"></script>
+    <title>W2P5</title>
+    <script type="text/javascript" src="w2p5.js"></script>
     <script id="wgsl" type="x-shader">
         struct Uniforms {
           aspect: f32,
@@ -249,6 +249,11 @@
           return L_r;
         }
 
+        fn glossy(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
+          let L_r = phong(r, hit);
+          return L_r + refractive(r, hit);
+        }
+
         fn get_camera_ray(ipcoords: vec2f) -> Ray
         {
           const eye = vec3f(2.0, 1.5, 2.0);
@@ -276,6 +281,7 @@
           case 2 { return phong(r, hit); }
           case 3 { return mirror(r, hit); }
           case 4 { return refractive(r, hit); }
+          case 5 { return glossy(r, hit); }
           case default { return (*hit).color; }
         }
       }
@@ -356,7 +362,8 @@
       <option value="0">Lambertian</option>
       <option value="1">Phong</option>
       <option value="2">Mirror</option>
-      <option value="3" selected>Refractive</option>
+      <option value="3">Refractive</option>
+      <option value="4" selected>Glossy</option>
     </select>
   </body>
-</html
+</html>

@@ -50,7 +50,7 @@ async function main() {
   const aspect = canvas.width / canvas.height;
   var cam_const = 1.0;
   var gamma = 1;
-  var shader = 4;
+  var shader = 5;
   var uniforms = new Float32Array([aspect, cam_const, gamma, shader]);
   device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 
