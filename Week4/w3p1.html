@@ -73,7 +73,7 @@
             let b1 = onb.tangent;
             let b2 = onb.binormal;
 
-            let texScale = 0.2;
+            let texScale = 0.02;
     
             let u = dot((hit_pos - position), b1) * texScale;
             let v = dot((hit_pos - position), b2) * texScale;
@@ -449,6 +449,13 @@
     <canvas id="webgpu-canvas" width="512" height="512">
       Please use a browser that supports HTML5 canvas.
     </canvas>
+    <select id="shaderMenu">
+      <option value="0">Lambertian</option>
+      <option value="1">Phong</option>
+      <option value="2">Mirror</option>
+      <option value="3">Refractive</option>
+      <option value="4" selected>Glossy</option>
+    </select>
     <select id="addressmode" size="2">
       <option value="0">clamp-to-edge</option>
       <option value="1" selected>repeat</option>
