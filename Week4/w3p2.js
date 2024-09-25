@@ -42,21 +42,50 @@ async function main() {
   var cam_const = 1.0;
   var gamma = 1;
   var shader = 5;
+  var subdivs = 1;
+  var pixelsize = 1 / canvas.height;
   var uniforms_f = new Float32Array([aspect, cam_const, gamma, shader]);
   device.queue.writeBuffer(uniformBuffer_f, 0, uniforms_f);
 
+  let jitter = new Float32Array(200); // allowing subdivs from 1 to 10
+  const jitterBuffer = device.createBuffer({
+    size: jitter.byteLength,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
+  });
+
+  compute_jitters(jitter, pixelsize, subdivs);
+  device.queue.writeBuffer(jitterBuffer, 0, jitter);
+
+  function compute_jitters(jitter, pixelsize, subdivs) {
+    const step = pixelsize/subdivs;
+    if(subdivs < 2) {
+      jitter[0] = 0.0;
+      jitter[1] = 0.0;
+    } else {
+      for(var i = 0; i < subdivs; ++i)
+        for(var j = 0; j < subdivs; ++j) {
+          const idx = (i*subdivs + j)*2;
+          jitter[idx] = (Math.random() + j) * step - pixelsize*0.5;
+          jitter[idx + 1] = (Math.random() + i)*step - pixelsize*0.5;
+      }
+    }
+  }
 
   var addressMenu = document.getElementById("addressmode");
   var filterMenu = document.getElementById("filtermode");
+  var increaseButton = document.getElementById("inc_subdiv");
+  var decreaseButton = document.getElementById("dec_subdiv");
   const use_repeat = addressMenu.selectedIndex;
   const use_linear = filterMenu.selectedIndex;
-  var uniforms_ui = new Uint32Array([use_repeat, use_linear]);
+  var uniforms_ui = new Uint32Array([use_repeat, use_linear, subdivs*subdivs]);
 
   const uniformBuffer_ui = device.createBuffer({
     size: uniforms_ui.byteLength, // number of bytes
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
   device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
+
+  // Event listeners
   addressMenu.addEventListener("click", () => {
     uniforms_ui[0] = addressMenu.selectedIndex;
     device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
@@ -64,6 +93,26 @@ async function main() {
   });
   filterMenu.addEventListener("click", () => {
     uniforms_ui[1] = filterMenu.selectedIndex;
+    device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
+    requestAnimationFrame(animate);
+  });
+  increaseButton.addEventListener("click", () => {
+    if (subdivs < 10) {
+      subdivs += 1;
+    }
+    compute_jitters(jitter, pixelsize, subdivs);
+    uniformBuffer_ui[2] = subdivs * subdivs;
+    device.queue.writeBuffer(jitterBuffer, 0, jitter);
+    device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
+    requestAnimationFrame(animate);
+  });
+  decreaseButton.addEventListener("click", () => {
+    if (subdivs > 1) {
+      subdivs -= 1;
+    }
+    compute_jitters(jitter, pixelsize, subdivs);
+    uniformBuffer_ui[2] = subdivs * subdivs;
+    device.queue.writeBuffer(jitterBuffer, 0, jitter);
     device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
     requestAnimationFrame(animate);
   });
@@ -93,9 +142,9 @@ async function main() {
       { binding: 0, resource: { buffer: uniformBuffer_f } },
       { binding: 1, resource: { buffer: uniformBuffer_ui } },
       { binding: 2, resource: texture.createView() },
+      { binding: 3, resource: { buffer: jitterBuffer } },
     ],
   });
-
 
   function animate() {
     uniforms_f[1] = cam_const;

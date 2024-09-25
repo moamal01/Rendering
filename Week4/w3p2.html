@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>W3P1</title>
-    <script type="text/javascript" src="w3p1.js"></script>
+    <script type="text/javascript" src="w3p2.js"></script>
     <script id="wgsl" type="x-shader">
         struct Uniforms_f {
           aspect: f32,
@@ -14,11 +14,13 @@
         struct Uniforms_ui {
           use_repeat: u32,
           use_linear: u32,
+          number_of_jitters: u32,
         };
 
         @group(0) @binding(0) var<uniform> uniforms_f : Uniforms_f;
         @group(0) @binding(1) var<uniform> uniforms_ui: Uniforms_ui;
         @group(0) @binding(2) var my_texture: texture_2d<f32>;
+        @group(0) @binding(3) var<storage> jitter: array<vec2f>;
 
         struct VSOut {
           @builtin(position) position: vec4f,
@@ -422,15 +424,17 @@
           const bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
           const max_depth = 10;
           let uv = vec2f(coords.x*uniforms_f.aspect*0.5f, coords.y*0.5f);
-          var r = get_camera_ray(uv);
+          
           var result = vec3f(0.0);
-          var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0, 0.0));
 
           let use_repeat = uniforms_ui.use_repeat != 0; let use_linear = uniforms_ui.use_linear != 0;
           let color = select(texture_nearest(my_texture, uv, use_repeat), texture_linear(my_texture, uv, use_repeat), use_linear);
 
-          for(var i = 0; i < max_depth; i++) {
-              if(intersect_scene(&r, &hit)) {
+          for(var j = 0u; j < uniforms_ui.number_of_jitters; j++) {
+            var r = get_camera_ray(uv + jitter[j]);
+            var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0, 0.0));
+            for(var i = 0; i < max_depth; i++) {
+              if (intersect_scene(&r, &hit)) {
                   result += shade(&r, &hit);
               } else {
                   result += bgcolor.rgb; break;
@@ -439,8 +443,10 @@
               if hit.has_hit {
                   break;
               }
-          }
+            }
+          } 
 
+          result /= f32(uniforms_ui.number_of_jitters);
           return vec4f(pow(result, vec3f(1.0/uniforms_f.gamma)), bgcolor.a);
       }
     </script>
@@ -464,5 +470,7 @@
       <option value="0">nearest</option>
       <option value="1" selected>linear</option>
     </select>
+    <button id="inc_subdiv">Increase subdivisions</button>
+    <button id="dec_subdiv">Decrease subdivisions</button>
   </body>
 </html>
