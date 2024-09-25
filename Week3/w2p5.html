@@ -233,6 +233,25 @@
 
         fn phong(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
           let light = sample_point_light(hit.position);
+          var shadow_ray = Ray(
+            hit.position,
+            light.w_i,
+            1e-4,
+            light.dist - 1e-4
+          );
+
+          var shadow_hit = HitInfo(
+            false,
+            hit.dist,
+            hit.position,
+            hit.normal,
+            vec3f(0.0),
+            1,
+            1.5,
+          );
+
+          let L_a = hit.color * 0.1;
+
           let A = r.origin;
           let B = hit.position;
 
@@ -244,7 +263,11 @@
           let w_0 = reflect(r.direction, hit.normal) / length(r.direction);
           let w_i = light.w_i;
 
-          let L_r = ((rho_d / pi) + (rho_s * (s + 2) / (2 * pi)) * pow(max(dot(w_0, w_i), 0.0), s)) * (light.L_i * dot(w_i, hit.normal));
+          if (intersect_scene(&shadow_ray, &shadow_hit)) {
+            return L_a;
+          }
+
+          let L_r =((rho_d / pi) + (rho_s * (s + 2) / (2 * pi)) * pow(max(dot(w_0, w_i), 0.0), s)) * light.L_i * max(dot(w_i, hit.normal), 0.0);
 
           return L_r;
         }
