@@ -101,7 +101,7 @@ async function main() {
       subdivs += 1;
     }
     compute_jitters(jitter, pixelsize, subdivs);
-    uniformBuffer_ui[2] = subdivs * subdivs;
+    uniforms_ui[2] = subdivs * subdivs;
     device.queue.writeBuffer(jitterBuffer, 0, jitter);
     device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
     requestAnimationFrame(animate);
@@ -111,7 +111,7 @@ async function main() {
       subdivs -= 1;
     }
     compute_jitters(jitter, pixelsize, subdivs);
-    uniformBuffer_ui[2] = subdivs * subdivs;
+    uniforms_ui[2] = subdivs * subdivs;
     device.queue.writeBuffer(jitterBuffer, 0, jitter);
     device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
     requestAnimationFrame(animate);
