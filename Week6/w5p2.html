@@ -397,7 +397,7 @@
           }
           
           // Check ray intersect with triangels
-          for (var i = 0u; i < 10; i = i + 1u) {
+          for (var i = 0u; i < arrayLength(&meshFaces); i = i + 1u) {
             if intersect_triangle((*r), hit, i) {
               hit.shader = 1;
               r.tmax = hit.dist;

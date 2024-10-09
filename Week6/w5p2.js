@@ -66,7 +66,7 @@ async function main() {
   });
 
   // Position buffer
-  var drawingInfo = await readOBJFile("../objects/CornellBox.obj", 0.5, true);
+  var drawingInfo = await readOBJFile("../objects/teapot.obj", 0.5, true);
 
   const positionsBuffer = device.createBuffer({
     size: drawingInfo.vertices.byteLength,
