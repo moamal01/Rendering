@@ -97,7 +97,7 @@ async function main() {
 
   // Camera
   const aspect = canvas.width / canvas.height;
-  var cam_const = 1.0;
+  var cam_const = 2.5;
   var gamma = 1;
   var shader = 5;
   var pixelsize = 1 / canvas.height;

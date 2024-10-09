@@ -193,8 +193,20 @@
           return light;
         }
 
+        fn sample_directional_light(pos: vec3f) -> Light {
+          let L_e = vec3f(3.14159);
+
+          let light = Light (
+            L_e,
+            -normalize(vec3f(-1.0)),
+            1000,
+          );
+
+          return light;
+        }
+
         fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_point_light(hit.position);
+          let light = sample_directional_light(hit.position);
 
           var shadow_ray = Ray(
             hit.position,
@@ -227,8 +239,6 @@
         }
 
         fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_point_light(hit.position);
-
           let A = r.origin;
           let B = hit.position;
           let w_i = (A - B) / length(A - B);
@@ -246,8 +256,6 @@
         }
 
         fn refractive(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_point_light(hit.position);
-
           let A = r.origin;
           let B = hit.position;
           let w_i = (A - B) / length(A - B);
@@ -272,7 +280,7 @@
         }
 
         fn phong(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_point_light(hit.position);
+          let light = sample_directional_light(hit.position);
           var shadow_ray = Ray(
             hit.position,
             light.w_i,
@@ -362,7 +370,6 @@
 
           let b1 = normalize(cross(v, u));
           let b2 = cross(b1, v);
-          let d = 2.5;
 
           var ray: Ray;
           ray.origin = eye;
