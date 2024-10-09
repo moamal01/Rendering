@@ -46,6 +46,7 @@ async function main() {
 
   const use_repeat = addressMenu.selectedIndex;
   const use_linear = filterMenu.selectedIndex;
+  var subdivs = 1;
   var uniforms_ui = new Uint32Array([use_repeat, use_linear, subdivs*subdivs]);
 
   const uniformBuffer_ui = device.createBuffer({
@@ -63,7 +64,11 @@ async function main() {
     size: jitter.byteLength,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
   });
-
+  compute_jitters(jitter, pixelsize, subdivs);
+  uniforms_ui[2] = subdivs * subdivs;
+  device.queue.writeBuffer(jitterBuffer, 0, jitter);
+  device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
+  
   // Position buffer
   var positions = [-0.2, 0.1, 0.9, 1.0, 0.2, 0.1, 0.9, 1.0, -0.2, 0.1, -0.1, 1.0];
   var drawingInfo = new Object();
@@ -102,7 +107,6 @@ async function main() {
   var cam_const = 1.0;
   var gamma = 1;
   var shader = 5;
-  var subdivs = 1;
   var pixelsize = 1 / canvas.height;
   var uniforms_f = new Float32Array([aspect, cam_const, gamma, shader]);
   device.queue.writeBuffer(uniformBuffer_f, 0, uniforms_f);

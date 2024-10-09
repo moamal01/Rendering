@@ -98,7 +98,9 @@
           return false;
         }
 
-        fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, face: vec3u) -> bool {
+        fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, faceIndex: u32) -> bool {
+          let face = meshFaces[faceIndex];
+
           let v0 = vPositions[face[0]];
           let v1 = vPositions[face[1]];
           let v2 = vPositions[face[2]];
@@ -389,7 +391,7 @@
           let p_color = vec3f(0.1, 0.7, 0.0);
 
           // triangle
-          let face = meshFaces[0];
+          let faceIndex = 0u;
 
           // sphere
           let center = vec3f(0.0, 0.5, 0.0);
@@ -403,7 +405,7 @@
             r.tmax = hit.dist;
           }
 
-          if intersect_triangle((*r), hit, face) {
+          if intersect_triangle((*r), hit, faceIndex) {
             hit.shader = 1;
             r.tmax = hit.dist;
           }
