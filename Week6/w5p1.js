@@ -55,7 +55,7 @@ async function main() {
   device.queue.writeBuffer(uniformBuffer_ui, 0, uniforms_ui);
 
   // Texture
-  const texture = await load_texture(device, "grass.jpg");
+  const texture = await load_texture(device, "../common/grass.jpg");
 
   // Jitter buffer
   let jitter = new Float32Array(200); // allowing subdivs from 1 to 10
