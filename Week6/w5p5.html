@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>W3P1</title>
-    <script type="text/javascript" src="w5p4.js"></script>
+    <script type="text/javascript" src="w5p5.js"></script>
     <script type="text/javascript" src="../common/OBJParser.js"></script>
     <script id="wgsl" type="x-shader">
         @group(0) @binding(0) var<uniform> uniforms_f : Uniforms_f;
@@ -14,6 +14,12 @@
         @group(0) @binding(6) var<storage> normals: array<vec3f>;
         @group(0) @binding(7) var<storage> materials: array<material>;
         @group(0) @binding(8) var<storage> materialIndices: array<u32>;
+        @group(0) @binding(9) var<uniform> lightIndices: LightIndices;
+
+        struct LightIndices {
+          triangle_1: u32,
+          triangle_2: u32,
+        };
 
         struct Uniforms_f {
           aspect: f32,
@@ -58,6 +64,7 @@
           shader: u32,
           ior1_over_ior2: f32,
           texcoords: vec2f,
+          emission: vec3f,
         };
 
         struct Light {
@@ -100,6 +107,7 @@
             (*hit).color = color;
             (*hit).shader = 0;
             (*hit).texcoords = vec2f(u, v);
+            (*hit).emission = vec3f(0.0);
             return true;
           }
 
@@ -140,6 +148,7 @@
               (*hit).normal = normalize(alpha*n0 + beta*n1 + gamma*n2);
               (*hit).color = mat.diffuse.rgb;
               (*hit).shader = 0;
+              (*hit).emission = mat.emission.rgb;
               return true;
             }
           }
@@ -148,15 +157,43 @@
         }
 
         fn sample_point_light(pos: vec3f) -> Light {
-          let p = vec3f(0.0, 1.0, 0.0);
-          let I = vec3f(3.14159);
+          let face1 = meshFaces[lightIndices.triangle_1];
+          let face2 = meshFaces[lightIndices.triangle_2];
 
-          let L_i = I / (length(p - pos) * length(p - pos));
+          let v0 = vPositions[face1[0]];
+          let v1 = vPositions[face1[1]];
+          let v2 = vPositions[face1[2]];
+          let v3 = vPositions[face2[0]];
+          let v4 = vPositions[face2[1]];
+          let v5 = vPositions[face2[2]];
+
+          let edge1 = v0 - v1;
+          let edge2 = v0 - v2;
+          let a_triangle1 = length(cross(edge1, edge2)) / 2.0;
+          let n_triangle1 = cross(edge1, edge2);
+
+          let edge3 = v3 - v4;
+          let edge4 = v3 - v5;
+          let a_triangle2 = length(cross(edge3, edge4)) / 2.0;
+          let n_triangle2 = cross(edge3, edge4);
+
+          let materialIndex1 = materialIndices[lightIndices.triangle_1];
+          let materialIndex2 = materialIndices[lightIndices.triangle_2];
+
+          let material1 = materials[materialIndex1];
+          let material2 = materials[materialIndex2];
+
+          let L_e = (material1.emission + material2.emission).rgb / 2.0;
+          let A = a_triangle1 + a_triangle2;
+          let avg_pos = (v0 + v1 + v2 + v3 + v4 + v5) / 6.0;
+
+          let n = normalize(n_triangle1 + n_triangle2);
+          let L_i = dot(n, -normalize(avg_pos - pos)) * (L_e * A) / ((length(avg_pos - pos)) * length((avg_pos - pos)));
 
           let light = Light (
             L_i,
-            normalize(p - pos),
-            length(p - pos)
+            normalize(avg_pos - pos),
+            length(avg_pos - pos)
           );
 
           return light;
@@ -175,13 +212,13 @@
         }
 
         fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_directional_light(hit.position);
+          let light = sample_point_light(hit.position);
 
           var shadow_ray = Ray(
             hit.position,
             light.w_i,
-            1e-4,
-            light.dist - 1e-4
+            1e-3,
+            light.dist - 1e-3
           );
 
           var shadow_hit = HitInfo(
@@ -192,19 +229,19 @@
             vec3f(0.0),
             1,
             1.5,
-            vec2f(0.0, 0.0),
+            vec2f(0.0),
+            vec3f(0.0),
           );
 
-          let L_a = hit.color * 0.1;
-          let L_e = 0.0;
+          let L_e = hit.emission;
 
-          let L_r = ((hit.color * 0.9) / 3.14159) * light.L_i * dot(hit.normal,light.w_i) + L_a;
+          let L_r = ((hit.color * 0.9) / 3.14159) * light.L_i * dot(hit.normal,light.w_i);
 
           if (intersect_scene(&shadow_ray, &shadow_hit)) {
-            return L_a;
+            return L_e;
           }
 
-          return L_e + L_r + L_a;
+          return L_e + L_r;
         }
 
         fn mirror(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
@@ -249,7 +286,7 @@
         }
 
         fn phong(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_directional_light(hit.position);
+          let light = sample_point_light(hit.position);
           var shadow_ray = Ray(
             hit.position,
             light.w_i,
@@ -265,7 +302,8 @@
             vec3f(0.0),
             1,
             1.5,
-            vec2f(0.0, 0.0),
+            vec2f(0.0),
+            vec3f(0.0),
           );
 
           let L_a = hit.color * 0.1;
@@ -385,7 +423,7 @@
 
           for(var j = 0u; j < uniforms_ui.number_of_jitters; j++) {
             var r = get_camera_ray(uv + jitter[j]);
-            var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0, 0.0));
+            var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0), vec3f(0.0));
             for(var i = 0; i < max_depth; i++) {
               if (intersect_scene(&r, &hit)) {
                   result += shade(&r, &hit);

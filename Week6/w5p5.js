@@ -83,7 +83,7 @@ async function main() {
 
   // Normal buffer
   const normalBuffer = device.createBuffer({
-    size: drawingInfo.indices.byteLength,
+    size: drawingInfo.normals.byteLength,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE
   });
   device.queue.writeBuffer(normalBuffer, 0, drawingInfo.normals);
@@ -102,7 +102,7 @@ async function main() {
     material.push(drawingInfo.materials[i].emission.b);
     material.push(drawingInfo.materials[i].emission.a);
   }
-  
+
   var emission = new Float32Array(material);
 
   const materialBuffer = device.createBuffer({
@@ -118,6 +118,15 @@ async function main() {
   });
   device.queue.writeBuffer(materialIndicesBuffer, 0, drawingInfo.mat_indices);
 
+  // Light indices buffer
+  const lightIndicesBuffer = device.createBuffer({
+    size: 64,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM
+  });
+
+  var light_indices = new Uint32Array(drawingInfo.light_indices);
+  device.queue.writeBuffer(lightIndicesBuffer, 0, light_indices)
+
   // Bindings
   const bindGroup = device.createBindGroup({
     layout: pipeline.getBindGroupLayout(0),
@@ -131,6 +140,7 @@ async function main() {
         { binding: 6, resource: { buffer: normalBuffer } },
         { binding: 7, resource: { buffer: materialBuffer } },
         { binding: 8, resource: { buffer: materialIndicesBuffer } },
+        { binding: 9, resource: { buffer: lightIndicesBuffer } },
       ],
     }
   );
