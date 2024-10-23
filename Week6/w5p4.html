@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>W3P1</title>
-    <script type="text/javascript" src="w5p3.js"></script>
+    <script type="text/javascript" src="w5p4.js"></script>
     <script type="text/javascript" src="../common/OBJParser.js"></script>
     <script id="wgsl" type="x-shader">
         @group(0) @binding(0) var<uniform> uniforms_f : Uniforms_f;
@@ -12,6 +12,8 @@
         @group(0) @binding(4) var<storage> vPositions: array<vec3f>;
         @group(0) @binding(5) var<storage> meshFaces: array<vec3u>;
         @group(0) @binding(6) var<storage> normals: array<vec3f>;
+        @group(0) @binding(7) var<storage> materials: array<material>;
+        @group(0) @binding(8) var<storage> materialIndices: array<u32>;
 
         struct Uniforms_f {
           aspect: f32,
@@ -70,6 +72,11 @@
           normal: vec3f,
         }
 
+        struct material {
+          diffuse: vec4f,
+          emission: vec4f,
+        }
+
         fn intersect_plane(r: Ray, hit: ptr<function, HitInfo>, position: vec3f, onb: Onb) -> bool {
           let t_prime = dot((position - r.origin), onb.normal) / dot(r.direction, onb.normal);
 
@@ -122,13 +129,16 @@
           let n1 = normals[face[1]];
           let n2 = normals[face[2]];
 
+          let mat_index = materialIndices[faceIndex];
+          let mat = materials[mat_index];
+
           if (r.tmin < t_prime && r.tmax > t_prime) {
             if (beta >= 0.0 && gamma >= 0.0 && beta + gamma <= 1.0) {
               (*hit).has_hit = true;
               (*hit).dist = t_prime;
               (*hit).position = r.origin + t_prime * r.direction;
               (*hit).normal = normalize(alpha*n0 + beta*n1 + gamma*n2);
-              (*hit).color = vec3f(0.9);
+              (*hit).color = mat.diffuse.rgb;
               (*hit).shader = 0;
               return true;
             }
@@ -321,8 +331,8 @@
 
         fn get_camera_ray(ipcoords: vec2f) -> Ray
         {
-          const eye = vec3f(0.15, 1.5, 10.0);
-          const lookAt = vec3f(0.15, 1.5, 0.0);
+          const eye = vec3f(277.0, 275.0, -570.0);
+          const lookAt = vec3f(277.0, 275.0, 0.0);
           const u = vec3f(0.0, 1.0, 0.0);
 
           let v = normalize(lookAt - eye);
@@ -406,7 +416,7 @@
     </script>
   </head>
   <body>
-    <canvas id="webgpu-canvas" width="800" height="450">
+    <canvas id="webgpu-canvas" width="512" height="512">
       Please use a browser that supports HTML5 canvas.
     </canvas>
     <select id="shaderMenu">
