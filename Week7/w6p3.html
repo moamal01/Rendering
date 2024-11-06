@@ -101,6 +101,51 @@
           max: vec3f,
         }
 
+        fn intersect_sphere(r: Ray, hit: ptr<function, HitInfo>, center: vec3f, radius: f32) -> bool {
+          let origin_minus_center = r.origin - center;
+
+          let a = dot(r.direction, r.direction);
+          let b_half = dot(origin_minus_center, r.direction);
+          let c = dot(origin_minus_center, origin_minus_center) - radius * radius;
+
+          if b_half * b_half - c < 0 {
+            return false;
+          }
+
+          let t1_prime = -b_half - sqrt(b_half*b_half - c);
+          var p = r.origin + t1_prime * r.direction;
+          var normal = p - center;
+
+          if t1_prime > r.tmin && t1_prime < r.tmax {
+            (*hit).has_hit = true;
+            (*hit).dist = t1_prime;
+            (*hit).position = p;
+            (*hit).normal = normal / length(normal);
+            (*hit).color = vec3f(0.0, 0.0, 0.0);
+            (*hit).shader = 1;
+            (*hit).ior1_over_ior2 = 1.5;
+            return true;
+          }
+
+          let t2_prime = -b_half + sqrt(b_half*b_half - c);
+
+          if t2_prime > r.tmin && t2_prime < r.tmax {
+            var p = r.origin + t2_prime * r.direction;
+            var normal = p - center;
+
+            (*hit).has_hit = true;
+            (*hit).dist = t2_prime;
+            (*hit).position = p;
+            (*hit).normal = normal / length(normal);
+            (*hit).color = vec3f(0.0, 0.0, 0.0);
+            (*hit).shader = 1;
+            (*hit).ior1_over_ior2 = 1.5;
+            return true;
+          }
+
+          return false;
+        }
+
         fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, faceIndex: u32) -> bool {
           let face = meshFaces[faceIndex];
 
@@ -319,7 +364,7 @@
           // Re-emit the ray with new direction and origin. Don't return anything for this hit.
           r.direction = 2 * cos_theta * hit.normal - w_i;
           r.origin = hit.position;
-          r.tmin = 1e-2;
+          r.tmin = 1e-4;
           r.tmax = 100000;
           hit.has_hit = false;
 
@@ -464,7 +509,43 @@
       }
 
       fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool {
+        // Mirror sphere
+        let center1 = vec3f(420.0, 90.0, 370.0);
+        let radius1 = 90.0;
+        let refractive_index1 = 0.0;
+
+        // Glass sphere
+        let center2 = vec3f(130.0, 90.0, 250.0);
+        let radius2 = 90.0;
+        let refractive_index2 = 1.5;
+
         if intersect_min_max(r) {
+          if intersect_sphere((*r), hit, center1, radius1) {
+            hit.shader = u32(uniforms_f.shader);
+
+            if (dot(r.direction, hit.normal) > 0) {
+              hit.ior1_over_ior2 = refractive_index1;
+              hit.normal = -hit.normal;
+            } else {
+              hit.ior1_over_ior2 = 1 / refractive_index1;
+            }
+
+            r.tmax = hit.dist;
+          }
+
+          if intersect_sphere((*r), hit, center2, radius2) {
+            hit.shader = u32(uniforms_f.shader);
+
+            if (dot(r.direction, hit.normal) > 0) {
+              hit.ior1_over_ior2 = refractive_index2;
+              hit.normal = -hit.normal;
+            } else {
+              hit.ior1_over_ior2 = 1 / refractive_index2;
+            }
+
+            r.tmax = hit.dist;
+          }
+
           intersect_trimesh((r), hit);
         }
         
