@@ -2,9 +2,9 @@
 <html>
   <head>
     <title>W3P1</title>
-    <script type="text/javascript" src="w6p1.js"></script>
-    <script type="text/javascript" src="../common/OBJParser.js"></script>
-    <script type="text/javascript" src="../bsptree/BspTree.js"></script>
+    <script type="text/javascript" src="w6p2.js"></script>
+    <script type="text/javascript" src="../bsptree/OBJParser_interleaved.js"></script>
+    <script type="text/javascript" src="../bsptree/BspTree_interleaved.js"></script>
     <script type="text/javascript" src="../bsptree/Aabb.js"></script>
     <script src="../angelCommon/MV.js" type="text/javascript"></script>
     <script id="wgsl" type="x-shader">
@@ -12,27 +12,21 @@
         @group(0) @binding(1) var<uniform> uniforms_ui: Uniforms_ui;
         @group(0) @binding(2) var my_texture: texture_2d<f32>;
         @group(0) @binding(3) var<storage> jitter: array<vec2f>;
-        @group(0) @binding(4) var<storage> vPositions: array<vec3f>;
+        @group(0) @binding(4) var<storage> attributes: array<Vertex_attributes>;
         @group(0) @binding(5) var<storage> meshFaces: array<vec4u>;
-        @group(0) @binding(6) var<storage> normals: array<vec3f>;
-        @group(0) @binding(7) var<storage> materials: array<material>;
-        //@group(0) @binding(8) var<storage> materialIndices: array<u32>;
+        @group(0) @binding(6) var<storage> materials: array<material>;
+        //@group(0) @binding(7) var<storage> materialIndices: array<u32>;
         //@group(0) @binding(9) var<uniform> lightIndices: LightIndices;
 
-        @group(0) @binding(8) var<uniform> aabb: Aabb;
-        @group(0) @binding(9) var<storage> treeIds: array<u32>;
-        @group(0) @binding(10) var<storage> bspTree: array<vec4u>;
-        @group(0) @binding(11) var<storage> bspPlanes: array<f32>;
+        @group(0) @binding(7) var<uniform> aabb: Aabb;
+        @group(0) @binding(8) var<storage> treeIds: array<u32>;
+        @group(0) @binding(9) var<storage> bspTree: array<vec4u>;
+        @group(0) @binding(10) var<storage> bspPlanes: array<f32>;
 
         const MAX_LEVEL = 20u;
         const BSP_LEAF = 3u;
         var<private> branch_node: array<vec2u, MAX_LEVEL>;
         var<private> branch_ray: array<vec2f, MAX_LEVEL>;
-
-        struct LightIndices {
-          triangle_1: u32,
-          triangle_2: u32,
-        };
 
         struct Uniforms_f {
           aspect: f32,
@@ -51,6 +45,11 @@
           @builtin(position) position: vec4f,
           @location(0) coords : vec2f,
         };
+
+        struct Vertex_attributes {
+          vPosition: vec3f,
+          normal: vec3f,
+        }
 
         @vertex
         fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut {
@@ -102,30 +101,45 @@
           max: vec3f,
         }
 
-        fn intersect_plane(r: Ray, hit: ptr<function, HitInfo>, position: vec3f, onb: Onb) -> bool {
-          let t_prime = dot((position - r.origin), onb.normal) / dot(r.direction, onb.normal);
+        fn intersect_sphere(r: Ray, hit: ptr<function, HitInfo>, center: vec3f, radius: f32) -> bool {
+          let origin_minus_center = r.origin - center;
 
-          if (t_prime > r.tmin && t_prime < r.tmax) {
-            let hit_pos = r.origin + t_prime * r.direction;
+          let a = dot(r.direction, r.direction);
+          let b_half = dot(origin_minus_center, r.direction);
+          let c = dot(origin_minus_center, origin_minus_center) - radius * radius;
 
-            let b1 = onb.tangent;
-            let b2 = onb.binormal;
+          if b_half * b_half - c < 0 {
+            return false;
+          }
 
-            let texScale = 0.2;
-    
-            let u = dot((hit_pos - position), b1) * texScale;
-            let v = dot((hit_pos - position), b2) * texScale;
+          let t1_prime = -b_half - sqrt(b_half*b_half - c);
+          var p = r.origin + t1_prime * r.direction;
+          var normal = p - center;
 
-            let color = select(texture_nearest(my_texture, vec2f(u, v), uniforms_ui.use_repeat != 0), texture_linear(my_texture, vec2f(u, v), uniforms_ui.use_repeat != 0), uniforms_ui.use_linear != 0);
+          if t1_prime > r.tmin && t1_prime < r.tmax {
+            (*hit).has_hit = true;
+            (*hit).dist = t1_prime;
+            (*hit).position = p;
+            (*hit).normal = normal / length(normal);
+            (*hit).color = vec3f(0.0, 0.0, 0.0);
+            (*hit).shader = 1;
+            (*hit).ior1_over_ior2 = 1.5;
+            return true;
+          }
+
+          let t2_prime = -b_half + sqrt(b_half*b_half - c);
+
+          if t2_prime > r.tmin && t2_prime < r.tmax {
+            var p = r.origin + t2_prime * r.direction;
+            var normal = p - center;
 
             (*hit).has_hit = true;
-            (*hit).dist = t_prime;
-            (*hit).position = hit_pos;
-            (*hit).normal = onb.normal;
-            (*hit).color = color;
-            (*hit).shader = 0;
-            (*hit).texcoords = vec2f(u, v);
-            (*hit).emission = vec3f(0.0);
+            (*hit).dist = t2_prime;
+            (*hit).position = p;
+            (*hit).normal = normal / length(normal);
+            (*hit).color = vec3f(0.0, 0.0, 0.0);
+            (*hit).shader = 1;
+            (*hit).ior1_over_ior2 = 1.5;
             return true;
           }
 
@@ -135,9 +149,9 @@
         fn intersect_triangle(r: Ray, hit: ptr<function, HitInfo>, faceIndex: u32) -> bool {
           let face = meshFaces[faceIndex];
 
-          let v0 = vPositions[face[0]];
-          let v1 = vPositions[face[1]];
-          let v2 = vPositions[face[2]];
+          let v0 = attributes[face[0]].vPosition;
+          let v1 = attributes[face[1]].vPosition;
+          let v2 = attributes[face[2]].vPosition;
 
           let e_0 = v1 - v0;
           let e_1 = v2 - v0;
@@ -155,9 +169,9 @@
           let gamma = -dot(cross_result, e_0) / denominator;
           let alpha = 1.0 - beta - gamma;
 
-          let n0 = normals[face[0]];
-          let n1 = normals[face[1]];
-          let n2 = normals[face[2]];
+          let n0 = attributes[face[0]].normal;
+          let n1 = attributes[face[1]].normal;
+          let n2 = attributes[face[2]].normal;
 
           let mat_index = face[3];
           let mat = materials[mat_index];
@@ -255,16 +269,16 @@
         return false;
       }
 
-      /*fn sample_point_light(pos: vec3f) -> Light {
-            let face1 = meshFaces[lightIndices.triangle_1];
-            let face2 = meshFaces[lightIndices.triangle_2];
+      fn sample_point_light(pos: vec3f) -> Light {
+            let face1 = meshFaces[2];
+            let face2 = meshFaces[3];
 
-            let v0 = vPositions[face1[0]];
-            let v1 = vPositions[face1[1]];
-            let v2 = vPositions[face1[2]];
-            let v3 = vPositions[face2[0]];
-            let v4 = vPositions[face2[1]];
-            let v5 = vPositions[face2[2]];
+            let v0 = attributes[face1[0]].vPosition;
+            let v1 = attributes[face1[1]].vPosition;
+            let v2 = attributes[face1[2]].vPosition;
+            let v3 = attributes[face2[0]].vPosition;
+            let v4 = attributes[face2[1]].vPosition;
+            let v5 = attributes[face2[2]].vPosition;
 
             let edge1 = v0 - v1;
             let edge2 = v0 - v2;
@@ -278,8 +292,8 @@
             let a_triangle2 = length(cross(edge3, edge4)) / 2.0;
             let n_triangle2 = cross(edge3, edge4);
 
-            let material1 = materials[face[3]];
-            let material2 = materials[face[3]];
+            let material1 = materials[face1[3]];
+            let material2 = materials[face2[3]];
 
             let L_e = (material1.emission + material2.emission).rgb / 2.0;
             let A = a_triangle1 + a_triangle2;
@@ -293,8 +307,7 @@
                 length(avg_pos - pos)
             );
             return light;
-        } */
-          
+        } 
 
         fn sample_directional_light(pos: vec3f) -> Light {
           let L_e = vec3f(3.14159);
@@ -309,7 +322,7 @@
         }
 
         fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_directional_light(hit.position);
+          let light = sample_point_light(hit.position);
 
           var shadow_ray = Ray(
             hit.position,
@@ -466,8 +479,8 @@
 
         fn get_camera_ray(ipcoords: vec2f) -> Ray
         {
-          const eye = vec3f(-0.02, 0.11, 0.6);
-          const lookAt = vec3f(-0.02, 0.11, 0.0);
+          const eye = vec3f(277.0, 275.0, -570.0);
+          const lookAt = vec3f(277.0, 275.0, 0.0);
           const u = vec3f(0.0, 1.0, 0.0);
 
           let v = normalize(lookAt - eye);
@@ -495,43 +508,79 @@
         }
       }
 
-        fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool {
-          if intersect_min_max(r) {
-            intersect_trimesh((r), hit);
-          }
-          
-          return hit.has_hit;
-        }
+      fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool {
+        // Mirror sphere
+        let center1 = vec3f(420.0, 90.0, 370.0);
+        let radius1 = 90.0;
+        let refractive_index1 = 0.0;
 
-        @fragment
-        fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f {
-          const bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
-          const max_depth = 10;
-          let uv = vec2f(coords.x*uniforms_f.aspect*0.5f, coords.y*0.5f);
-          
-          var result = vec3f(0.0);
+        // Glass sphere
+        let center2 = vec3f(130.0, 90.0, 250.0);
+        let radius2 = 90.0;
+        let refractive_index2 = 1.5;
 
-          let use_repeat = uniforms_ui.use_repeat != 0; let use_linear = uniforms_ui.use_linear != 0;
-          let color = select(texture_nearest(my_texture, uv, use_repeat), texture_linear(my_texture, uv, use_repeat), use_linear);
+        if intersect_min_max(r) {
+          if intersect_sphere((*r), hit, center1, radius1) {
+            hit.shader = u32(uniforms_f.shader);
 
-          for(var j = 0u; j < uniforms_ui.number_of_jitters; j++) {
-            var r = get_camera_ray(uv + jitter[j]);
-            var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0), vec3f(0.0));
-            for(var i = 0; i < max_depth; i++) {
-              if (intersect_scene(&r, &hit)) {
-                  result += shade(&r, &hit);
-              } else {
-                  result += bgcolor.rgb; break;
-              }
-
-              if hit.has_hit {
-                  break;
-              }
+            if (dot(r.direction, hit.normal) > 0) {
+              hit.ior1_over_ior2 = refractive_index1;
+              hit.normal = -hit.normal;
+            } else {
+              hit.ior1_over_ior2 = 1 / refractive_index1;
             }
-          } 
 
-          result /= f32(uniforms_ui.number_of_jitters);
-          return vec4f(pow(result, vec3f(1.0/uniforms_f.gamma)), bgcolor.a);
+            r.tmax = hit.dist;
+          }
+
+          if intersect_sphere((*r), hit, center2, radius2) {
+            hit.shader = u32(uniforms_f.shader);
+
+            if (dot(r.direction, hit.normal) > 0) {
+              hit.ior1_over_ior2 = refractive_index2;
+              hit.normal = -hit.normal;
+            } else {
+              hit.ior1_over_ior2 = 1 / refractive_index2;
+            }
+
+            r.tmax = hit.dist;
+          }
+
+          intersect_trimesh((r), hit);
+        }
+        
+        return hit.has_hit;
+      }
+
+      @fragment
+      fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f {
+        const bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
+        const max_depth = 10;
+        let uv = vec2f(coords.x*uniforms_f.aspect*0.5f, coords.y*0.5f);
+        
+        var result = vec3f(0.0);
+
+        let use_repeat = uniforms_ui.use_repeat != 0; let use_linear = uniforms_ui.use_linear != 0;
+        let color = select(texture_nearest(my_texture, uv, use_repeat), texture_linear(my_texture, uv, use_repeat), use_linear);
+
+        for(var j = 0u; j < uniforms_ui.number_of_jitters; j++) {
+          var r = get_camera_ray(uv + jitter[j]);
+          var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0), vec3f(0.0));
+          for(var i = 0; i < max_depth; i++) {
+            if (intersect_scene(&r, &hit)) {
+                result += shade(&r, &hit);
+            } else {
+                result += bgcolor.rgb; break;
+            }
+
+            if hit.has_hit {
+                break;
+            }
+          }
+        } 
+
+        result /= f32(uniforms_ui.number_of_jitters);
+        return vec4f(pow(result, vec3f(1.0/uniforms_f.gamma)), bgcolor.a);
       }
     </script>
   </head>
