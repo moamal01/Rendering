@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>W3P1</title>
-    <script type="text/javascript" src="w6p2.js"></script>
+    <script type="text/javascript" src="w7p3.js"></script>
     <script type="text/javascript" src="../bsptree/OBJParser_interleaved.js"></script>
     <script type="text/javascript" src="../bsptree/BspTree_interleaved.js"></script>
     <script type="text/javascript" src="../bsptree/Aabb.js"></script>
@@ -10,18 +10,14 @@
     <script id="wgsl" type="x-shader">
         @group(0) @binding(0) var<uniform> uniforms_f : Uniforms_f;
         @group(0) @binding(1) var<uniform> uniforms_ui: Uniforms_ui;
-        @group(0) @binding(2) var my_texture: texture_2d<f32>;
-        @group(0) @binding(3) var<storage> jitter: array<vec2f>;
-        @group(0) @binding(4) var<storage> attributes: array<Vertex_attributes>;
-        @group(0) @binding(5) var<storage> meshFaces: array<vec4u>;
-        @group(0) @binding(6) var<storage> materials: array<material>;
-        //@group(0) @binding(7) var<storage> materialIndices: array<u32>;
-        //@group(0) @binding(9) var<uniform> lightIndices: LightIndices;
-
-        @group(0) @binding(7) var<uniform> aabb: Aabb;
-        @group(0) @binding(8) var<storage> treeIds: array<u32>;
-        @group(0) @binding(9) var<storage> bspTree: array<vec4u>;
-        @group(0) @binding(10) var<storage> bspPlanes: array<f32>;
+        @group(0) @binding(2) var<storage> attributes: array<Vertex_attributes>;
+        @group(0) @binding(3) var<storage> meshFaces: array<vec4u>;
+        @group(0) @binding(4) var<storage> materials: array<material>;
+        @group(0) @binding(5) var<uniform> aabb: Aabb;
+        @group(0) @binding(6) var<storage> treeIds: array<u32>;
+        @group(0) @binding(7) var<storage> bspTree: array<vec4u>;
+        @group(0) @binding(8) var<storage> bspPlanes: array<f32>;
+        @group(0) @binding(9) var renderTexture: texture_2d<f32>;
 
         const MAX_LEVEL = 20u;
         const BSP_LEAF = 3u;
@@ -36,9 +32,9 @@
         };
 
         struct Uniforms_ui {
-          use_repeat: u32,
-          use_linear: u32,
-          number_of_jitters: u32,
+          height: u32,
+          width: u32,
+          frame: u32,
         };
 
         struct VSOut {
@@ -46,18 +42,14 @@
           @location(0) coords : vec2f,
         };
 
+        struct FSOut {
+          @location(0) frame: vec4f,
+          @location(1) accum: vec4f,
+        };
+
         struct Vertex_attributes {
           vPosition: vec3f,
           normal: vec3f,
-        }
-
-        @vertex
-        fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut {
-          const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
-          var vsOut: VSOut;
-          vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
-          vsOut.coords = pos[VertexIndex];
-          return vsOut;
         }
 
         struct Ray {
@@ -99,6 +91,78 @@
         struct Aabb {
           min: vec3f,
           max: vec3f,
+        }
+
+        @vertex
+        fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut {
+          const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
+          var vsOut: VSOut;
+          vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
+          vsOut.coords = pos[VertexIndex];
+          return vsOut;
+        }
+
+        // PRNG xorshift seed generator by NVIDIA
+        fn tea(val0: u32, val1: u32) -> u32 {
+          const N = 16u; // User specified number of iterations
+          var v0 = val0;
+          var v1 = val1;
+          var s0 = 0u;
+
+          for(var n = 0u; n < N; n++) {
+            s0 += 0x9e3779b9;
+            v0 += ((v1<<4)+0xa341316c)^(v1+s0)^((v1>>5)+0xc8013ea4);
+            v1 += ((v0<<4)+0xad90777d)^(v0+s0)^((v0>>5)+0x7e95761e);
+          }
+          return v0;
+        }
+
+        // Generate random unsigned int in [0, 2^31]
+        fn mcg31(prev: ptr<function, u32>) -> u32 {
+          const LCG_A = 1977654935u; // Multiplier from Hui-Ching Tang [EJOR 2007]
+          *prev = (LCG_A * (*prev)) & 0x7FFFFFFF;
+          return *prev;
+        }
+
+        // Generate random float in [0, 1]
+        fn rnd(prev: ptr<function, u32>) -> f32 {
+          return f32(mcg31(prev)) / f32(0x80000000);
+        }
+
+        @fragment
+        fn main_fs(@builtin(position) fragcoord: vec4f, @location(0) coords: vec2f) -> FSOut {
+          let launch_idx = u32(fragcoord.y)*uniforms_ui.width + u32(fragcoord.x);
+          var t = tea(launch_idx, uniforms_ui.frame);
+          let jitter = vec2f(rnd(&t), rnd(&t))/f32(uniforms_ui.height);
+
+          const bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
+          const max_depth = 10;
+          let uv = vec2f(coords.x*uniforms_f.aspect*0.5f, coords.y*0.5f);
+
+          var result = vec3f(0.0);
+  
+          var r = get_camera_ray(uv + jitter);
+          var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0), vec3f(0.0));
+          for(var i = 0; i < max_depth; i++) {
+            if (intersect_scene(&r, &hit)) {
+                result += shade(&r, &hit, &t);
+            } else {
+                result += bgcolor.rgb; break;
+            }
+
+            if hit.has_hit {
+                break;
+            }
+          } 
+
+          // Progressive update of image
+          let curr_sum = textureLoad(renderTexture, vec2u(fragcoord.xy), 0).rgb*f32(uniforms_ui.frame);
+          let accum_color = (result + curr_sum)/f32(uniforms_ui.frame + 1u);
+
+          var fsOut: FSOut;
+          fsOut.frame = vec4f(pow(accum_color, vec3f(1.0/uniforms_f.gamma)), 1.0);
+          fsOut.accum = vec4f(accum_color, 1.0);
+          return fsOut;
         }
 
         fn intersect_sphere(r: Ray, hit: ptr<function, HitInfo>, center: vec3f, radius: f32) -> bool {
@@ -269,16 +333,21 @@
         return false;
       }
 
-      fn sample_point_light(pos: vec3f) -> Light {
-            let face1 = meshFaces[2];
-            let face2 = meshFaces[3];
+      fn sample_point_light(pos: vec3f, t: ptr<function, u32>) -> Light {
+            let xi1 = rnd(t);
+            let xi2 = rnd(t);
+            let random_face = u32(rnd(t) * 2 + 2); // should by arrayLength(&lightIndices);
+
+            let bary1 = vec3f(1 - sqrt(xi1), (1-xi2) * sqrt(xi1), xi2 * sqrt(xi1));
+
+            let face1 = meshFaces[random_face];
 
             let v0 = attributes[face1[0]].vPosition;
             let v1 = attributes[face1[1]].vPosition;
             let v2 = attributes[face1[2]].vPosition;
-            let v3 = attributes[face2[0]].vPosition;
-            let v4 = attributes[face2[1]].vPosition;
-            let v5 = attributes[face2[2]].vPosition;
+            let n0 = attributes[face1[0]].normal;
+            let n1 = attributes[face1[1]].normal;
+            let n2 = attributes[face1[2]].normal;
 
             let edge1 = v0 - v1;
             let edge2 = v0 - v2;
@@ -286,20 +355,13 @@
             let a_triangle1 = length(cross(edge1, edge2)) / 2.0;
             let n_triangle1 = cross(edge1, edge2);
 
-            let edge3 = v3 - v4;
-            let edge4 = v3 - v5;
-
-            let a_triangle2 = length(cross(edge3, edge4)) / 2.0;
-            let n_triangle2 = cross(edge3, edge4);
-
             let material1 = materials[face1[3]];
-            let material2 = materials[face2[3]];
 
-            let L_e = (material1.emission + material2.emission).rgb / 2.0;
-            let A = a_triangle1 + a_triangle2;
-            let avg_pos = (v0 + v1 + v2 + v3 + v4 + v5) / 6.0;
-            let n = normalize(n_triangle1 + n_triangle2);
-            let L_i = dot(n, -normalize(avg_pos - pos)) * (L_e * A) / ((length(avg_pos - pos)) * length((avg_pos - pos)));
+            let L_e = material1.emission.rgb;
+            let A = a_triangle1;
+            let avg_pos = v0 * bary1.x + v1 * bary1.y + v2 * bary1.z;
+            let n = normalize(n0 * bary1.x + n1 * bary1.y + n2 * bary1.z);
+            let L_i = dot(n, -normalize(avg_pos - pos)) * (L_e * A * 2) / ((length(avg_pos - pos)) * length((avg_pos - pos)));
 
             let light = Light (
                 L_i,
@@ -321,8 +383,8 @@
           return light;
         }
 
-        fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitInfo>) -> vec3f {
-          let light = sample_point_light(hit.position);
+        fn lambertian(r: ptr<function, Ray>, hit: ptr<function, HitInfo>, t: ptr<function, u32>) -> vec3f {
+          let light = sample_point_light(hit.position, t);
 
           var shadow_ray = Ray(
             hit.position,
@@ -497,9 +559,9 @@
           return ray;
         }
 
-        fn shade(r: ptr<function, Ray>,hit: ptr<function, HitInfo>) -> vec3f {
+        fn shade(r: ptr<function, Ray>,hit: ptr<function, HitInfo>, t: ptr<function, u32>) -> vec3f {
           switch (*hit).shader {
-          case 1 { return lambertian(r, hit); }
+          case 1 { return lambertian(r, hit, t); }
           case 2 { return phong(r, hit); }
           case 3 { return mirror(r, hit); }
           case 4 { return refractive(r, hit); }
@@ -509,7 +571,7 @@
       }
 
       fn intersect_scene(r: ptr<function, Ray>, hit : ptr<function, HitInfo>) -> bool {
-        // Mirror sphere
+        /* Mirror sphere
         let center1 = vec3f(420.0, 90.0, 370.0);
         let radius1 = 90.0;
         let refractive_index1 = 0.0;
@@ -547,40 +609,13 @@
           }
 
           intersect_trimesh((r), hit);
+        }*/
+
+        if intersect_min_max(r) {
+          intersect_trimesh((r), hit);
         }
         
         return hit.has_hit;
-      }
-
-      @fragment
-      fn main_fs(@location(0) coords: vec2f) -> @location(0) vec4f {
-        const bgcolor = vec4f(0.1, 0.3, 0.6, 1.0);
-        const max_depth = 10;
-        let uv = vec2f(coords.x*uniforms_f.aspect*0.5f, coords.y*0.5f);
-        
-        var result = vec3f(0.0);
-
-        let use_repeat = uniforms_ui.use_repeat != 0; let use_linear = uniforms_ui.use_linear != 0;
-        let color = select(texture_nearest(my_texture, uv, use_repeat), texture_linear(my_texture, uv, use_repeat), use_linear);
-
-        for(var j = 0u; j < uniforms_ui.number_of_jitters; j++) {
-          var r = get_camera_ray(uv + jitter[j]);
-          var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0), vec3f(0.0));
-          for(var i = 0; i < max_depth; i++) {
-            if (intersect_scene(&r, &hit)) {
-                result += shade(&r, &hit);
-            } else {
-                result += bgcolor.rgb; break;
-            }
-
-            if hit.has_hit {
-                break;
-            }
-          }
-        } 
-
-        result /= f32(uniforms_ui.number_of_jitters);
-        return vec4f(pow(result, vec3f(1.0/uniforms_f.gamma)), bgcolor.a);
       }
     </script>
   </head>
@@ -603,7 +638,6 @@
       <option value="0">nearest</option>
       <option value="1" selected>linear</option>
     </select>
-    <button id="inc_subdiv">Increase subdivisions</button>
-    <button id="dec_subdiv">Decrease subdivisions</button>
+    <button id="prog_load">Progressive Loading</button>
   </body>
 </html>

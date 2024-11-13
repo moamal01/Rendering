@@ -18,7 +18,8 @@
       @vertex
       fn main_vs(@builtin(vertex_index) VertexIndex : u32) -> VSOut
       {
-        const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0)); var vsOut: VSOut;
+        const pos = array<vec2f, 4>(vec2f(-1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(1.0, -1.0));
+        var vsOut: VSOut;
         vsOut.position = vec4f(pos[VertexIndex], 0.0, 1.0);
         vsOut.coords = pos[VertexIndex];
         return vsOut;
