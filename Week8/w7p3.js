@@ -11,7 +11,7 @@ async function main() {
   const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 
   var progLoadToggle = document.getElementById("prog_load");
-  var progLoad = false;
+  var progLoad = true;
 
   context.configure({
     device: device,
