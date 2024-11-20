@@ -73,7 +73,6 @@
           emit: bool,
           rgb_factor: vec3f,
           extinction: vec3f,
-          inside: bool,
         };
 
         struct Light {
@@ -147,7 +146,7 @@
           var result = vec3f(0.0);
   
           var r = get_camera_ray(uv + jitter);
-          var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0), vec3f(0.0), true, vec3f(1.0), vec3f(0.0), false);
+          var hit = HitInfo(false, 0.0, vec3f(0.0), vec3f(0.0), vec3f(0.0), 0, 1.5, vec2f(0.0), vec3f(0.0), true, vec3f(1.0), vec3f(0.0));
           for(var i = 0; i < max_depth; i++) {
             if (intersect_scene(&r, &hit)) {
                 result += hit.rgb_factor * shade(&r, &hit, &t);
@@ -435,7 +434,6 @@
             true,
             vec3f(1.0),
             vec3f(0.0),
-            false,
           );
 
           let L_e = select(vec3f(0.0), hit.emission, hit.emit);
@@ -497,24 +495,20 @@
         fn transparent(r: ptr<function, Ray>, hit: ptr<function, HitInfo>, t: ptr<function, u32>) -> vec3f {
           let f = fresnel(r, hit);
 
-          if (hit.inside) {
-            let T_r = exp(-(*hit).extinction * (*hit).dist);
-            (*hit).rgb_factor *= T_r;
-
-            // Absorb or transmit:
-            /*let rnd_num = rnd(t);
-            let p = ((*hit).extinction.x + (*hit).extinction.y + (*hit).extinction.z) / 3.0;
-
-            if (rnd_num < p) {
-              (*hit).rgb_factor *= (*hit).extinction;
-              return (*hit).extinction * refractive(r, hit) * T_r / p;
-            }*/
-          }
-
           if (rnd(t) < f) {
             return mirror(r, hit);
           } else {
-            return refractive(r, hit);
+            let T_r = exp(-(*hit).extinction * (*hit).dist);
+
+            // Absorb or transmit:
+            let rnd_num = rnd(t);
+            let p = ((*hit).extinction.x + (*hit).extinction.y + (*hit).extinction.z) / 3.0;
+
+            if (rnd_num < p) {
+              return (*hit).extinction * refractive(r, hit) * T_r / p;
+            }
+
+            return (*hit).extinction;
           }
         }
 
@@ -565,7 +559,6 @@
             true,
             vec3f(1.0),
             vec3f(1.0),
-            false,
           );
 
           let L_a = hit.color * 0.1;
@@ -689,8 +682,6 @@
           if intersect_sphere((*r), hit, center2, radius2) {
             hit.shader = 6;
             hit.extinction = vec3f(0.538, 0.03, 0.926);
-
-            hit.inside = dot(r.direction, hit.normal) > 0;
 
             if (dot(r.direction, hit.normal) > 0) {
               hit.ior1_over_ior2 = refractive_index2;
