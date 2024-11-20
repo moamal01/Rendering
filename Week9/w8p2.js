@@ -105,7 +105,7 @@ async function main() {
 
   // Light indices buffer
   const lightIndicesBuffer = device.createBuffer({
-    size: 64,
+    size: drawingInfo.light_indices.byteLength,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE
   });
 
