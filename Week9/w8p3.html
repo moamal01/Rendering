@@ -505,10 +505,11 @@
             let p = ((*hit).extinction.x + (*hit).extinction.y + (*hit).extinction.z) / 3.0;
 
             if (rnd_num < p) {
+              (*hit).rgb_factor *= (*hit).extinction;
               return (*hit).extinction * refractive(r, hit) * T_r / p;
             }
 
-            return (*hit).extinction;
+            return refractive(r, hit);
           }
         }
 
